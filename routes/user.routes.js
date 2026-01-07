@@ -1,9 +1,12 @@
 import express from "express";
-import { db } from "../db/index.js";
-import { usersTable } from "../models/user.model.js";
-import { randomBytes, createHmac } from "node:crypto";
-import { signupPostRequestBodySchema } from "../validations/request.validation.js";
-import { eq } from "drizzle-orm";
+import {
+  signupPostRequestBodySchema,
+  loginPostRequestBodySchema,
+} from "../validations/request.validation.js";
+
+import { getUserByEmail, signupNewUser } from "../services/user.service.js";
+import { hashPasswordWithSalt } from "../utils/has.js";
+import { createUserToken } from "../utils/token.js";
 
 const router = express.Router();
 
@@ -16,37 +19,36 @@ router.post("/signup", async (req, res) => {
   }
   const { firstName, lastName, email, password } = validationResult.data;
 
-  const [existingUser] = await db
-    .select({ id: usersTable.id })
-    .from(usersTable)
-    .where(eq(usersTable.email, email));
-
+  const existingUser = await getUserByEmail(email);
   if (existingUser)
     return res
       .status(400)
       .json({ error: `User with email ${email} already exists!` });
-
-  const salt = randomBytes(256).toString("hex");
-  const hasedPassword = createHmac("sha256", salt)
-    .update(password)
-    .digest("hex");
-
-  const [user] = await db
-    .insert(usersTable)
-    .values({
-      firstName,
-      lastName,
-      email,
-      salt,
-      password: hasedPassword,
-    })
-    .returning({
-      id: usersTable.id,
-      firstName: usersTable.firstName,
-      lastName: usersTable.lastName,
-      email: usersTable.email,
-    });
+  const user = await signupNewUser(firstName, lastName, email, password);
   return res.status(201).json(user);
+});
+
+router.post("/login", async (req, res) => {
+  const validationResult = await loginPostRequestBodySchema.safeParseAsync(
+    req.body
+  );
+  if (!validationResult.success) {
+    return res.status(400).json({ error: validationResult.error });
+  }
+  const { email, password } = validationResult.data;
+  const user = await getUserByEmail(email);
+  if (!user)
+    return res
+      .status(404)
+      .json({ error: `User with this ${email} not found!` });
+  const { password: hashedPassword } = hashPasswordWithSalt(
+    password,
+    user.salt
+  );
+  if (user.password !== hashedPassword)
+    return res.status(400).json({ error: "Invalid credentials" });
+  const token = await createUserToken({ id: user.id });
+  return res.status(200).json({ token });
 });
 
 export default router;
