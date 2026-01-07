@@ -6,6 +6,9 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch index",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   },
