@@ -12,7 +12,7 @@ export const createUserToken = async (payload) => {
   return token;
 };
 
-export const validateUserToken = async (token) => {
+export const validateUserToken = (token) => {
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     return payload;
